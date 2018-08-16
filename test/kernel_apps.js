@@ -123,7 +123,7 @@ for (const kernelType of ['Kernel', 'KernelProxy']) {
                 })
 
                 it('was initialized on constructor', async () => {
-                    assert.isAbove(await app.getInitializationBlock(), 0, 'app should have been initialized')
+                    assert.isAbove((await app.getInitializationBlock()).toNumber(), 0, 'app should have been initialized')
                 })
 
                 it('is upgradeable', async () => {
@@ -173,7 +173,7 @@ for (const kernelType of ['Kernel', 'KernelProxy']) {
                     it('can initialize', async () => {
                         await app.initialize()
 
-                        assert.isAbove(await app.getInitializationBlock(), 0, 'app should have been initialized')
+                        assert.isAbove((await app.getInitializationBlock()).toNumber(), 0, 'app should have been initialized')
                     })
 
                     it('allows calls with isInitialized modifier', async () => {
