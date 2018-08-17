@@ -3,7 +3,7 @@ pragma solidity 0.4.24;
 // without all permissions
 // external ENS
 
-import "../../contracts/factory/APMRegistryFactory.sol";
+import "../factory/APMRegistryFactory.sol";
 
 contract APMRegistryFactoryMock is APMRegistryFactory {
     function APMRegistryFactoryMock(
