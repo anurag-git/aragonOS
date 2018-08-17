@@ -34,7 +34,7 @@ contract TimeHelpers {
     *      tests.
     */
     function getTimestamp() internal view returns (uint256) {
-        return now;
+        return block.timestamp;
     }
 
     /**
