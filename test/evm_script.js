@@ -3,24 +3,23 @@ const { rawEncode } = require('ethereumjs-abi')
 const { assertRevert } = require('./helpers/assertThrow')
 const { encodeCallScript } = require('./helpers/evmScript')
 
-const ExecutionTarget = artifacts.require('ExecutionTarget')
-const Executor = artifacts.require('Executor')
-
 const Kernel = artifacts.require('Kernel')
 const ACL = artifacts.require('ACL')
 const DAOFactory = artifacts.require('DAOFactory')
 const EVMScriptRegistryFactory = artifacts.require('EVMScriptRegistryFactory')
 const EVMScriptRegistry = artifacts.require('EVMScriptRegistry')
-const EVMScriptRegistryConstants = artifacts.require('EVMScriptRegistryConstants')
+const CallsScript = artifacts.require('CallsScript')
 const IEVMScriptExecutor = artifacts.require('IEVMScriptExecutor')
 
-const keccak256 = require('js-sha3').keccak_256
-const APP_BASE_NAMESPACE = '0x'+keccak256('base')
+// Mocks
+const ExecutionTarget = artifacts.require('ExecutionTarget')
+const EVMScriptExecutor = artifacts.require('EVMScriptExecutor')
 
-const getContract = artifacts.require
+const keccak256 = require('js-sha3').keccak_256
 
 contract('EVM Script', accounts => {
-    let executor, executionTarget, dao, daoFact, reg, constants, acl, baseExecutor
+    let callsScriptBase, executorBase, executor, executionTarget, dao, daoFact, reg, acl
+    let APP_BASES_NAMESPACE
 
     const boss = accounts[1]
 
@@ -28,12 +27,13 @@ contract('EVM Script', accounts => {
 
     before(async () => {
         const regFact = await EVMScriptRegistryFactory.new()
+        callsScriptBase = CallsScript.at(await regFact.baseCallScript())
 
-        const kernelBase = await getContract('Kernel').new()
-        const aclBase = await getContract('ACL').new()
+        const kernelBase = await Kernel.new(true) // petrify immediately
+        const aclBase = await ACL.new()
         daoFact = await DAOFactory.new(kernelBase.address, aclBase.address, regFact.address)
 
-        constants = await EVMScriptRegistryConstants.new()
+        APP_BASES_NAMESPACE = await kernelBase.APP_BASES_NAMESPACE()
     })
 
     beforeEach(async () => {
@@ -43,8 +43,8 @@ contract('EVM Script', accounts => {
         reg = EVMScriptRegistry.at(receipt.logs.filter(l => l.event == 'DeployEVMScriptRegistry')[0].args.reg)
 
         await acl.createPermission(boss, dao.address, await dao.APP_MANAGER_ROLE(), boss, { from: boss })
-        baseExecutor = await Executor.new()
-        await dao.setApp(APP_BASE_NAMESPACE, executorAppId, baseExecutor.address, { from: boss })
+        executorBase = await EVMScriptExecutor.new()
+        await dao.setApp(APP_BASES_NAMESPACE, executorAppId, executorBase.address, { from: boss })
     })
 
     it('factory registered just 1 script executor', async () => {
@@ -61,10 +61,35 @@ contract('EVM Script', accounts => {
         })
     })
 
-    context('executor', () => {
+    it('fails if directly calling base executor', async () => {
+        const executionTarget = await ExecutionTarget.new()
+        const action = { to: executionTarget.address, calldata: executionTarget.contract.execute.getData() }
+        const script = encodeCallScript([action])
+
+        assertRevert(() => callsScriptBase.execScript(script, '0x', []))
+    })
+
+    context('> Uninitialized executor', () => {
         beforeEach(async () => {
-            const receipt = await dao.newAppInstance(executorAppId, baseExecutor.address, { from: boss })
-            executor = Executor.at(receipt.logs.filter(l => l.event == 'NewAppProxy')[0].args.proxy)
+            const receipt = await dao.newAppInstance(executorAppId, executorBase.address, { from: boss })
+            executor = EVMScriptExecutor.at(receipt.logs.filter(l => l.event == 'NewAppProxy')[0].args.proxy)
+            // Explicitly don't initialize the executor
+            executionTarget = await ExecutionTarget.new()
+        })
+
+        it('fails to execute any executor', async () => {
+            const action = { to: executionTarget.address, calldata: executionTarget.contract.execute.getData() }
+            const script = encodeCallScript([action])
+
+            await assertRevert(() => executor.execute(script))
+        })
+    })
+
+    context('> Executor', () => {
+        beforeEach(async () => {
+            const receipt = await dao.newAppInstance(executorAppId, executorBase.address, { from: boss })
+            executor = EVMScriptExecutor.at(receipt.logs.filter(l => l.event == 'NewAppProxy')[0].args.proxy)
+            await executor.initialize()
             executionTarget = await ExecutionTarget.new()
         })
 
@@ -88,7 +113,7 @@ contract('EVM Script', accounts => {
             })
         })
 
-        context('spec ID 1', () => {
+        context('> Spec ID 1', () => {
             it('executes single action script', async () => {
                 const action = { to: executionTarget.address, calldata: executionTarget.contract.execute.getData() }
                 const script = encodeCallScript([action])
@@ -115,7 +140,7 @@ contract('EVM Script', accounts => {
                 })
             })
 
-            it('can execute if call doesnt cointain blacklist addresses', async () => {
+            it("can execute if call doesn't contain blacklist addresses", async () => {
                 const action = { to: executionTarget.address, calldata: executionTarget.contract.execute.getData() }
                 const script = encodeCallScript([action])
 
@@ -171,7 +196,7 @@ contract('EVM Script', accounts => {
                 await executor.execute(encodeCallScript([]))
             })
 
-            context('script overflow', async () => {
+            context('> Script overflow', async () => {
                 const encodeCallScriptBad = actions => {
                     return actions.reduce((script, { to, calldata }) => {
                         const addr = rawEncode(['address'], [to]).toString('hex')
