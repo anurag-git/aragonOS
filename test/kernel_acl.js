@@ -103,9 +103,9 @@ contract('Kernel ACL', accounts => {
             const r1 = await acl.grantPermissionP(accounts[3], app, role, [param], { from: granted })
 
             // retrieve the params back with the getters
-            const numParams = await acl.getPermissionParamsLength(accounts[3], app, role)
+            const numParams = await acl.getPermissionParamsLength.call(accounts[3], app, role)
             assert.equal(numParams, 1, 'There should be just 1 param')
-            const returnedParam = await acl.getPermissionParam(accounts[3], app, role, 0)
+            const returnedParam = await acl.getPermissionParam.call(accounts[3], app, role, 0)
             assert.equal(returnedParam[0].valueOf(), parseInt(argId, 16), 'param id should match')
             assert.equal(returnedParam[1].valueOf(), parseInt(op, 10), 'param op should match')
             assert.equal(returnedParam[2].valueOf(), parseInt(value, 10), 'param value should match')
@@ -148,7 +148,7 @@ contract('Kernel ACL', accounts => {
 
         it('returns created permission', async () => {
             const allowed = await acl.hasPermission.call(granted, app, role)
-            const manager = await acl.getPermissionManager(app, role)
+            const manager = await acl.getPermissionManager.call(app, role)
 
             assert.isTrue(allowed, 'entity should be allowed to perform role actions')
             assert.equal(manager, granted, 'permission parent should be correct')
@@ -194,7 +194,7 @@ contract('Kernel ACL', accounts => {
             })
 
             it('changes manager', async () => {
-                const manager = await acl.getPermissionManager(app, role)
+                const manager = await acl.getPermissionManager.call(app, role)
                 assert.equal(manager, newManager, 'manager should have changed')
             })
 
@@ -222,7 +222,7 @@ contract('Kernel ACL', accounts => {
             })
 
             it('removes manager', async () => {
-                const noManager = await acl.getPermissionManager(app, role)
+                const noManager = await acl.getPermissionManager.call(app, role)
                 assert.equal('0x0000000000000000000000000000000000000000', noManager, 'manager should have been removed')
             })
 
